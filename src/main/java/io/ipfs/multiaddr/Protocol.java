@@ -16,6 +16,8 @@ public class Protocol {
         UDP(17, 16, "udp"),
         DCCP(33, 16, "dccp"),
         IP6(41, 128, "ip6"),
+        DNS4(54, LENGTH_PREFIXED_VAR_SIZE, "dns4"),
+        DNS6(55, LENGTH_PREFIXED_VAR_SIZE, "dns6"),
         SCTP(132, 16, "sctp"),
         UTP(301, 0, "utp"),
         UDT(302, 0, "udt"),
@@ -24,7 +26,8 @@ public class Protocol {
         QUIC(460, 0, "quic"),
         HTTPS(443, 0, "https"),
         HTTP(480, 0, "http"),
-        ONION(444, 80, "onion");
+        ONION(444, 80, "onion"),
+        DNSADDR(12345, LENGTH_PREFIXED_VAR_SIZE, "dnsaddr");
 
         public final int code, size;
         public final String name;
@@ -138,6 +141,15 @@ public class Protocol {
                     dout.flush();
                     return b.toByteArray();
                 }
+                case DNSADDR: {
+                    ByteArrayOutputStream b = new ByteArrayOutputStream();
+                    byte[] addrBytes = addr.getBytes();
+                    byte[] addrVarint = new byte[(32 - Integer.numberOfLeadingZeros(addrBytes.length)+6)/7];
+                    putUvarint(addrVarint, addrBytes.length);
+                    b.write(addrVarint);
+                    b.write(addrBytes);
+                    return b.toByteArray();
+                }
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -147,6 +159,7 @@ public class Protocol {
 
     public String readAddress(InputStream in) throws IOException {
         int sizeForAddress = sizeForAddress(in);
+
         byte[] buf;
         switch (type) {
             case IP4:
@@ -172,6 +185,10 @@ public class Protocol {
                 String port = Integer.toString((in.read() << 8) | (in.read()));
                 return Base32.encode(host)+":"+port;
             case UNIX:
+                buf = new byte[sizeForAddress];
+                read(in, buf);
+                return new String(buf);
+            case DNSADDR:
                 buf = new byte[sizeForAddress];
                 read(in, buf);
                 return new String(buf);
